@@ -39,7 +39,7 @@ HAS_NPN = False # TODO
 class SSLError(OSError):
     pass
 
-class CertificateError(SSLError):
+class CertificateError(ValueError):
     pass
 
 
@@ -143,6 +143,7 @@ def match_hostname(cert, hostname):
 
 def _proxy(method):
     return lambda self, *args, **kwargs: getattr(self._conn, method)(*args, **kwargs)
+
 
 class SSLSocket(object):
     SSL_TIMEOUT = 3
