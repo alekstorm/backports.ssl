@@ -221,6 +221,9 @@ class SSLSocket(object):
     def send(self, data, flags=None):
         return self._safe_ssl_call(False, self._conn.send, data, flags)
 
+    def sendall(self, data, flags=None):
+        return self._safe_ssl_call(False, self._conn.sendall, data, flags)
+
     def selected_npn_protocol(self):
         raise NotImplementedError()
 
