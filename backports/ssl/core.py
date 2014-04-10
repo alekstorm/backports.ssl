@@ -169,7 +169,7 @@ class SSLSocket(object):
             try:
                 self.do_handshake()
             except socket.error as e:
-                if e.args[0][0][1] == 'SSL3_GET_SERVER_CERTIFICATE':
+                if e.args[0][0][1] in ('SSL3_GET_SERVER_CERTIFICATE', 'SSL3_READ_BYTES'):
                     raise SSLError(e)
                 raise
 
@@ -265,12 +265,17 @@ class SSLSocket(object):
         )
 
     # FIXME support other arguments - not included in the signature to make
-    # calls that expect them fail fast.
+    # calls that expect them fail fast - use codecs.open()?
     def makefile(self, mode='r', buffering=None):
         return _fileobject(self._conn, mode, buffering)
 
+    @property
+    def family(self):
+        return self._conn._socket.family
+
     # a dash of magic to reduce boilerplate
-    for method in ['accept', 'bind', 'close', 'fileno', 'getsockname', 'listen', 'settimeout']:
+    for method in ['accept', 'bind', 'close', 'fileno', 'getsockname', 'listen',
+                   'setblocking', 'settimeout']:
         locals()[method] = _proxy(method)
 
 
