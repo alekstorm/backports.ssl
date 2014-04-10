@@ -639,3 +639,23 @@ class SSLContext(object):
                          suppress_ragged_eofs, server_hostname,
                          # TODO what if this is changed after the fact?
                          self.check_hostname)
+
+
+def wrap_socket(sock, keyfile=None, certfile=None, server_side=False,
+                cert_reqs=CERT_NONE, ssl_version=PROTOCOL_SSLv23, ca_certs=None,
+                do_handshake_on_connect=True, suppress_ragged_eofs=True,
+                ciphers=None):
+    # TODO the stdlib docs say the SSLContext isn't constructed until connect()
+    # is called on the socket, if it's not already connected. Check if we need
+    # to emulate that behavior as well, or if it's just an optimization.
+    ctx = SSLContext(ssl_version)
+    ctx.verify_mode = cert_reqs
+    if certfile is not None:
+        ctx.load_cert_chain(certfile, keyfile)
+    if ca_certs is not None:
+        ctx.load_verify_locations(ca_certs)
+    if ciphers is not None:
+        ctx.set_ciphers(ciphers)
+    return ctx.wrap_socket(sock, server_side=server_side,
+                           do_handshake_on_connect=do_handshake_on_connect,
+                           suppress_ragged_eofs=suppress_ragged_eofs)
