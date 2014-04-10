@@ -2,6 +2,9 @@
 """
 The Python 3.4 standard `ssl` module API implemented on top of pyOpenSSL
 """
+from __future__ import absolute_import
+from __future__ import print_function
+
 try:
     from StringIO import StringIO as BytesIO
 except ImportError:
@@ -13,6 +16,10 @@ import time
 
 from OpenSSL import crypto
 from OpenSSL import SSL as ossl
+
+__target__ = 'ssl'
+
+__implements__ = ['SSLError', 'CertificateError', 'match_hostname', 'SSLSocket', 'SSLContext', 'wrap_socket', '_fileobject']
 
 CERT_NONE = ossl.VERIFY_NONE
 CERT_REQUIRED = ossl.VERIFY_PEER | ossl.VERIFY_FAIL_IF_NO_PEER_CERT
@@ -30,6 +37,7 @@ for external, internal in _OPENSSL_ATTRS.items():
     value = getattr(ossl, internal, None)
     if value:
         locals()[external] = value
+        __implements__.append(external)
 
 OP_ALL = 0
 for bit in [31] + list(range(10)): # TODO figure out the names of these other flags

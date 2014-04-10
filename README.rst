@@ -29,8 +29,20 @@ Isn't this obsoleted by `PEP 466`_?
 -----------------------------------
 
 If you're on Python 2.7, then probably. But PEP 466 doesn't cover Python 2.6,
-3.2, or 3.3, and the `ssl.RAND_*()` functions are explicitly out of scope. This
-package supports it all.
+3.2, or 3.3, and the ``ssl.RAND_*()`` functions are explicitly out of scope.
+This package supports it all.
+
+How do I use it with third-party libraries?
+-------------------------------------------
+
+Monkey-patching support is included a la `gevent`_::
+
+    import backports.ssl.monkey as monkey
+    import requests
+
+    monkey.patch()
+    requests.get('https://google.com')
+
 
 Why am I getting ``AttributeError``\ s for newer features?
 ------------------------------------------------------
@@ -44,10 +56,11 @@ Installing OpenSSL
 TODO
 ----
 
-- Implement everything needed by urllib3.
-- Monkey-patch ourselves into higher-level libraries like requests, without
-  getting clobbered by gevent.
-- Backport and pass the standard Python `ssl` test suite.
+- Verify that we play nicely with gevent's monkey-patching.
+- Backport and pass the standard Python ``ssl`` test suite.
+- If not that, automate testing against hyper, urllib3, requests, and Tornado
+  test suites.
 - Use the bundled 3.x OpenSSL, if available and newer than the default.
 
 .. _`PEP 466`: http://legacy.python.org/dev/peps/pep-0466
+.. _`gevent`: http://gevent.org
