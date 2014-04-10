@@ -28,9 +28,8 @@ versions of Python.
 Isn't this obsoleted by `PEP 466`_?
 -----------------------------------
 
-If you're on Python 2.7 and only want improved default security options, then
-yes. But PEP 466 doesn't cover Python 2.6, 3.2, or 3.3, and new feature
-enhancements, like NPN, ALPN, SNI, etc, are explicitly out of scope. This
+If you're on Python 2.7, then probably. But PEP 466 doesn't cover Python 2.6,
+3.2, or 3.3, and the `ssl.RAND_*()` functions are explicitly out of scope. This
 package supports it all.
 
 Why am I getting ``AttributeError``\ s for newer features?
