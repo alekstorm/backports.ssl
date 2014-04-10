@@ -159,7 +159,12 @@ class SSLSocket(object):
             self._conn.set_connect_state() # FIXME does this override do_handshake_on_connect=False?
 
         if self.connected and self._do_handshake_on_connect:
-            self.do_handshake()
+            try:
+                self.do_handshake()
+            except socket.error as e:
+                if e.args[0][0][1] == 'SSL3_GET_SERVER_CERTIFICATE':
+                    raise SSLError(e)
+                raise
 
     @property
     def connected(self):
