@@ -270,7 +270,7 @@ class SSLSocket(object):
         return _fileobject(self._conn, mode, buffering)
 
     # a dash of magic to reduce boilerplate
-    for method in ['accept', 'bind', 'close', 'getsockname', 'listen']:
+    for method in ['accept', 'bind', 'close', 'fileno', 'getsockname', 'listen', 'settimeout']:
         locals()[method] = _proxy(method)
 
 
