@@ -10,6 +10,7 @@ import errno
 import socket
 import time
 
+from OpenSSL import crypto
 from OpenSSL import SSL as ossl
 
 CERT_NONE = ossl.VERIFY_NONE
@@ -227,7 +228,7 @@ class SSLSocket(object):
     def selected_npn_protocol(self):
         raise NotImplementedError()
 
-    def getpeercert(self):
+    def getpeercert(self, binary_form=False):
         def resolve_alias(alias):
             return dict(
                 C='countryName',
@@ -243,11 +244,17 @@ class SSLSocket(object):
             # tuples, and that's not just a quirk of the examples I've seen.
             return tuple([((resolve_alias(name.decode('utf-8')), value.decode('utf-8')),) for name, value in name.get_components()])
 
+        cert = self._conn.get_peer_certificate()
+
+        if binary_form:
+            return crypto.dump_certificate(crypto.FILETYPE_ASN1, cert)
+
         # The standard getpeercert() takes the nice X509 object tree returned
         # by OpenSSL and turns it into a dict according to some format it seems
         # to have made up on the spot. Here, we do our best to emulate that.
-        cert = self._conn.get_peer_certificate()
-        result = dict(
+        # TODO extensions, including subjectAltName (see _decode_certificate in
+        # _ssl.c and get_subj_alt_name in urllib3)
+        return dict(
             issuer=to_components(cert.get_issuer()),
             subject=to_components(cert.get_subject()),
             version=cert.get_subject(),
