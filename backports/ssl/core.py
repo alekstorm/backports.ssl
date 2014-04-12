@@ -301,6 +301,8 @@ class SSLSocket(object):
     # FIXME support other arguments - not included in the signature to make
     # calls that expect them fail fast - use codecs.open()?
     def makefile(self, mode='r', buffering=None):
+        if buffering is None:
+            buffering = -1
         return _fileobject(self._conn, mode, buffering)
 
     @property
@@ -373,7 +375,7 @@ class _fileobject(object):
 
     def flush(self):
         if self._wbuf:
-            data = "".join(self._wbuf)
+            data = b('').join(self._wbuf)
             self._wbuf = []
             self._wbuf_len = 0
             buffer_size = max(self._rbufsize, self.default_bufsize)
@@ -395,26 +397,27 @@ class _fileobject(object):
         return self._sock.fileno()
 
     def write(self, data):
-        data = str(data) # XXX Should really reject non-string non-buffers
+        data = six.binary_type(data) # XXX Should really reject non-string non-buffers
         if not data:
             return
         self._wbuf.append(data)
         self._wbuf_len += len(data)
         if (self._wbufsize == 0 or
-            (self._wbufsize == 1 and '\n' in data) or
+            (self._wbufsize == 1 and b('\n') in data) or
             (self._wbufsize > 1 and self._wbuf_len >= self._wbufsize)):
             self.flush()
 
     def writelines(self, list):
         # XXX We could do better here for very long lists
         # XXX Should really reject non-string non-buffers
-        lines = filter(None, map(str, list))
+        lines = filter(None, map(six.binary_type, list))
         self._wbuf_len += sum(map(len, lines))
         self._wbuf.extend(lines)
         if (self._wbufsize <= 1 or
             self._wbuf_len >= self._wbufsize):
             self.flush()
 
+    # TODO no select() on AppEngine
     def _wait_for_sock(self):
         rd, wd, ed = select.select([self._sock], [], [],
                                    self._sock.gettimeout())
@@ -500,7 +503,7 @@ class _fileobject(object):
             # check if we already have it in our buffer
             buf.seek(0)
             bline = buf.readline(size)
-            if bline.endswith('\n') or len(bline) == size:
+            if bline.endswith(b('\n')) or len(bline) == size:
                 self._rbuf = BytesIO()
                 self._rbuf.write(buf.read())
                 return bline
@@ -516,7 +519,7 @@ class _fileobject(object):
                 recv = self._sock.recv
                 while True:
                     try:
-                        while data != "\n":
+                        while data != b('\n'):
                             data = recv(1)
                             if not data:
                                 break
@@ -527,7 +530,7 @@ class _fileobject(object):
                     except ossl.Error:
                         raise SSLError() # TODO details
                     break
-                return "".join(buffers)
+                return b('').join(buffers)
 
             buf.seek(0, 2)  # seek end
             self._rbuf = BytesIO()  # reset _rbuf.  we consume it via buf.
@@ -541,7 +544,7 @@ class _fileobject(object):
                     raise SSLError() # TODO details
                 if not data:
                     break
-                nl = data.find('\n')
+                nl = data.find(b('\n'))
                 if nl >= 0:
                     nl += 1
                     buf.write(data[:nl])
@@ -573,7 +576,7 @@ class _fileobject(object):
                     break
                 left = size - buf_len
                 # did we just receive a newline?
-                nl = data.find('\n', 0, left)
+                nl = data.find(b('\n'), 0, left)
                 if nl >= 0:
                     nl += 1
                     # save the excess data to _rbuf
