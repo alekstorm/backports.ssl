@@ -14,15 +14,36 @@ import select
 import socket
 import time
 
-from OpenSSL import crypto
-from OpenSSL import SSL as ossl
+import six
+from six import b
+
+
+class _FailOnAccess(object):
+    def __init__(self, error):
+        self.error = error
+
+    def __getattribute__(self, name):
+        raise self.error
+
+    def __setattribute__(self, name, value):
+        raise self.error
+
+def import_lazy_fail(parent, name, error):
+    fail = _FailOnAccess(error)
+    try:
+        module = __import__(parent)
+    except ImportError:
+        return fail
+    return getattr(module, name, fail)
+
+error = ImportError('pyOpenSSL is not installed')
+crypto = import_lazy_fail('OpenSSL', 'crypto', error)
+ossl = import_lazy_fail('OpenSSL', 'SSL', error)
 
 __target__ = 'ssl'
 
-__implements__ = ['SSLError', 'CertificateError', 'match_hostname', 'SSLSocket', 'SSLContext', 'wrap_socket', '_fileobject']
-
-CERT_NONE = ossl.VERIFY_NONE
-CERT_REQUIRED = ossl.VERIFY_PEER | ossl.VERIFY_FAIL_IF_NO_PEER_CERT
+__implements__ = ['SSLError', 'CertificateError', 'match_hostname', 'SSLSocket',
+                  'SSLContext', 'wrap_socket', '_fileobject']
 
 _OPENSSL_ATTRS = dict(
     OP_NO_COMPRESSION='OP_NO_COMPRESSION',
@@ -33,15 +54,20 @@ _OPENSSL_ATTRS = dict(
     PROTOCOL_TLSv1_2='TLSv1_2_METHOD',
 )
 
-for external, internal in _OPENSSL_ATTRS.items():
-    value = getattr(ossl, internal, None)
-    if value:
-        locals()[external] = value
-        __implements__.append(external)
+# TODO maybe shrink __implements__ if pyOpenSSL unavailable?
+if not isinstance(ossl, _FailOnAccess):
+    CERT_NONE = ossl.VERIFY_NONE
+    CERT_REQUIRED = ossl.VERIFY_PEER | ossl.VERIFY_FAIL_IF_NO_PEER_CERT
 
-OP_ALL = 0
-for bit in [31] + list(range(10)): # TODO figure out the names of these other flags
-    OP_ALL |= 1 << bit
+    for external, internal in _OPENSSL_ATTRS.items():
+        value = getattr(ossl, internal, None)
+        if value:
+            locals()[external] = value
+            __implements__.append(external)
+
+    OP_ALL = 0
+    for bit in [31] + list(range(10)): # TODO figure out the names of these other flags
+        OP_ALL |= 1 << bit
 
 HAS_NPN = False # TODO
 
