@@ -17,6 +17,8 @@ import time
 import six
 from six import b
 
+from .subject_alt_name import get_subject_alt_name
+
 
 class _FailOnAccess(object):
     def __init__(self, error):
@@ -287,8 +289,6 @@ class SSLSocket(object):
         # The standard getpeercert() takes the nice X509 object tree returned
         # by OpenSSL and turns it into a dict according to some format it seems
         # to have made up on the spot. Here, we do our best to emulate that.
-        # TODO extensions, including subjectAltName (see _decode_certificate in
-        # _ssl.c and get_subj_alt_name in urllib3)
         return dict(
             issuer=to_components(cert.get_issuer()),
             subject=to_components(cert.get_subject()),
@@ -296,6 +296,7 @@ class SSLSocket(object):
             serialNumber=cert.get_serial_number(),
             notBefore=cert.get_notBefore(),
             notAfter=cert.get_notAfter(),
+            subjectAltName=[('DNS', value) for value in get_subject_alt_name(cert)],
         )
 
     # FIXME support other arguments - not included in the signature to make
