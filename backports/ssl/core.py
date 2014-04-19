@@ -10,7 +10,10 @@ try:
 except ImportError:
     from io import BytesIO
 import errno
-import select
+try:
+    import select
+except ImportError:
+    select = None
 import socket
 import time
 
@@ -77,9 +80,23 @@ HAS_NPN = False # TODO
 class SSLError(OSError):
     pass
 
-class CertificateError(ValueError):
+class SSLZeroReturnError(SSLError):
     pass
 
+class SSLWantReadError(SSLError):
+    pass
+
+class SSLWantWriteError(SSLError):
+    pass
+
+class SSLSyscallError(SSLError):
+    pass
+
+class SSLEOFError(SSLError):
+    pass
+
+class CertificateError(ValueError):
+    pass
 
 # lifted from the Python 3.4 stdlib
 def _dnsname_match(dn, hostname, max_wildcards=1):
@@ -183,10 +200,38 @@ def _proxy(method):
     return lambda self, *args, **kwargs: getattr(self._conn, method)(*args, **kwargs)
 
 
-class SSLSocket(object):
-    SSL_TIMEOUT = 3
-    SSL_RETRY = .01
+# Lovingly stolen from CherryPy (http://svn.cherrypy.org/tags/cherrypy-3.2.1/cherrypy/wsgiserver/ssl_pyopenssl.py).
+SSL_RETRY = .01
+def _safe_ssl_call(suppress_ragged_eofs, sock, call, *args, **kwargs):
+    """Wrap the given call with SSL error-trapping."""
+    start = time.time()
+    while True:
+        try:
+            return getattr(sock, call)(*args, **kwargs)
 
+        except (ossl.WantReadError, ossl.WantWriteError):
+            if select is None:
+                if time.time() - start > sock.gettimeout():
+                    raise socket.timeout()
+                time.sleep(SSL_RETRY)
+            elif not select.select([sock], [], [], sock.gettimeout())[0]:
+                raise socket.timeout()
+
+        except ossl.SysCallError as e:
+            if suppress_ragged_eofs and e.args[0] == (-1, 'Unexpected EOF'):
+                return b''
+            elif e.args[0] == 0:
+                raise SSLEOFError(*e.args)
+            raise SSLSysCallError(*e.args)
+
+        except ossl.ZeroReturnError as e:
+            raise SSLZeroReturnError(*e.args)
+
+        except ossl.Error as e:
+            raise SSLError(*e.args)
+
+
+class SSLSocket(object):
     def __init__(self, conn, server_side, do_handshake_on_connect,
                  suppress_ragged_eofs, server_hostname, check_hostname):
         self._conn = conn
@@ -202,12 +247,7 @@ class SSLSocket(object):
             self._conn.set_connect_state() # FIXME does this override do_handshake_on_connect=False?
 
         if self.connected and self._do_handshake_on_connect:
-            try:
-                self.do_handshake()
-            except socket.error as e:
-                if e.args[0][0][1] in ('SSL3_GET_SERVER_CERTIFICATE', 'SSL3_READ_BYTES'):
-                    raise SSLError(e)
-                raise
+            _safe_ssl_call(False, self._conn, 'do_handshake')
 
     @property
     def connected(self):
@@ -221,46 +261,25 @@ class SSLSocket(object):
             return False
         return True
 
-    # Lovingly stolen from CherryPy (http://svn.cherrypy.org/tags/cherrypy-3.2.1/cherrypy/wsgiserver/ssl_pyopenssl.py).
-    def _safe_ssl_call(self, suppress_ragged_eofs, call, *args, **kwargs):
-        """Wrap the given call with SSL error-trapping."""
-        start = time.time()
-        while True:
-            try:
-                return call(*args, **kwargs)
-            except (ossl.WantReadError, ossl.WantWriteError):
-                # Sleep and try again. This is dangerous, because it means
-                # the rest of the stack has no way of differentiating
-                # between a "new handshake" error and "client dropped".
-                # Note this isn't an endless loop: there's a timeout below.
-                time.sleep(self.SSL_RETRY)
-            except ossl.Error as e:
-                if suppress_ragged_eofs and e.args == (-1, 'Unexpected EOF'):
-                    return b''
-                raise socket.error(e.args[0])
-
-            if time.time() - start > self.SSL_TIMEOUT:
-                raise socket.timeout('timed out')
-
     def connect(self, address):
         self._conn.connect(address)
         if self._do_handshake_on_connect:
             self.do_handshake()
 
     def do_handshake(self):
-        self._safe_ssl_call(False, self._conn.do_handshake)
+        _safe_ssl_call(False, self._conn, 'do_handshake')
         if self._check_hostname:
             match_hostname(self.getpeercert(), self._conn.get_servername().decode('utf-8'))
 
     def recv(self, bufsize, flags=None):
-        return self._safe_ssl_call(self._suppress_ragged_eofs, self._conn.recv,
+        return _safe_ssl_call(self._suppress_ragged_eofs, self._conn, 'recv',
                                bufsize, flags)
 
     def send(self, data, flags=None):
-        return self._safe_ssl_call(False, self._conn.send, data, flags)
+        return _safe_ssl_call(False, self._conn, 'send', data, flags)
 
     def sendall(self, data, flags=None):
-        return self._safe_ssl_call(False, self._conn.sendall, data, flags)
+        return _safe_ssl_call(False, self._conn, 'sendall', data, flags)
 
     def selected_npn_protocol(self):
         raise NotImplementedError()
@@ -418,13 +437,6 @@ class _fileobject(object):
             self._wbuf_len >= self._wbufsize):
             self.flush()
 
-    # TODO no select() on AppEngine
-    def _wait_for_sock(self):
-        rd, wd, ed = select.select([self._sock], [], [],
-                                   self._sock.gettimeout())
-        if not rd:
-            raise socket.timeout()
-
     def read(self, size=-1):
         # Use max, disallow tiny reads in a loop as they are very inefficient.
         # We never leave read() with any leftover data from a new recv() call
@@ -438,17 +450,8 @@ class _fileobject(object):
         if size < 0:
             # Read until EOF
             self._rbuf = BytesIO()  # reset _rbuf.  we consume it via buf.
-            while True:
-                try:
-                    data = self._sock.recv(rbufsize)
-                except ossl.WantReadError:
-                    self._wait_for_sock()
-                    continue
-                except ossl.Error:
-                    raise SSLError() # TODO details
-                if not data:
-                    break
-                buf.write(data)
+            data = _safe_ssl_call(False, self._sock, 'recv', rbufsize)
+            buf.write(data)
             return buf.getvalue()
         else:
             # Read until size bytes or EOF seen, whichever comes first
@@ -469,13 +472,7 @@ class _fileobject(object):
                 # than that.  The returned data string is short lived
                 # as we copy it into a BytesIO and free it.  This avoids
                 # fragmentation issues on many platforms.
-                try:
-                    data = self._sock.recv(left)
-                except ossl.WantReadError:
-                    self._wait_for_sock()
-                    continue
-                except ossl.Error:
-                    raise SSLError() # TODO details
+                data = _safe_ssl_call(False, self._sock, 'recv', left)
                 if not data:
                     break
                 n = len(data)
@@ -517,32 +514,17 @@ class _fileobject(object):
                 buffers = [buf.read()]
                 self._rbuf = BytesIO()  # reset _rbuf.  we consume it via buf.
                 data = None
-                recv = self._sock.recv
-                while True:
-                    try:
-                        while data != b('\n'):
-                            data = recv(1)
-                            if not data:
-                                break
-                            buffers.append(data)
-                    except ossl.WantReadError:
-                        self._wait_for_sock()
-                        continue
-                    except ossl.Error:
-                        raise SSLError() # TODO details
-                    break
+                while data != b('\n'):
+                    data = _safe_ssl_call(False, self._sock, 'recv', 1)
+                    if not data:
+                        break
+                    buffers.append(data)
                 return b('').join(buffers)
 
             buf.seek(0, 2)  # seek end
             self._rbuf = BytesIO()  # reset _rbuf.  we consume it via buf.
             while True:
-                try:
-                    data = self._sock.recv(self._rbufsize)
-                except ossl.WantReadError:
-                    self._wait_for_sock()
-                    continue
-                except ossl.Error:
-                    raise SSLError() # TODO details
+                data = _safe_ssl_call(False, self._sock, 'recv', self._rbufsize)
                 if not data:
                     break
                 nl = data.find(b('\n'))
@@ -566,13 +548,7 @@ class _fileobject(object):
                 return rv
             self._rbuf = BytesIO()  # reset _rbuf.  we consume it via buf.
             while True:
-                try:
-                    data = self._sock.recv(self._rbufsize)
-                except ossl.WantReadError:
-                    self._wait_for_sock()
-                    continue
-                except ossl.Error:
-                    raise SSLError() # TODO details
+                data = _safe_ssl_call(False, self._sock, 'recv', self._rbufsize)
                 if not data:
                     break
                 left = size - buf_len
