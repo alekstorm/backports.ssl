@@ -22,28 +22,12 @@ from six import b
 
 from .subject_alt_name import get_subject_alt_name
 
-
-class _FailOnAccess(object):
-    def __init__(self, error):
-        self.error = error
-
-    def __getattribute__(self, name):
-        raise self.error
-
-    def __setattribute__(self, name, value):
-        raise self.error
-
-def import_lazy_fail(parent, name, error):
-    fail = _FailOnAccess(error)
-    try:
-        module = __import__(parent)
-    except ImportError:
-        return fail
-    return getattr(module, name, fail)
-
-error = ImportError('pyOpenSSL is not installed')
-crypto = import_lazy_fail('OpenSSL', 'crypto', error)
-ossl = import_lazy_fail('OpenSSL', 'SSL', error)
+try:
+    from OpenSSL import crypto
+    from OpenSSL import SSL as ossl
+except ImportError:
+    crypto = None
+    ossl = None
 
 __target__ = 'ssl'
 
@@ -60,7 +44,7 @@ _OPENSSL_ATTRS = dict(
 )
 
 # TODO maybe shrink __implements__ if pyOpenSSL unavailable?
-if not isinstance(ossl, _FailOnAccess):
+if ossl is not None:
     CERT_NONE = ossl.VERIFY_NONE
     CERT_REQUIRED = ossl.VERIFY_PEER | ossl.VERIFY_FAIL_IF_NO_PEER_CERT
 
@@ -661,14 +645,14 @@ class SSLContext(object):
 
 
 def wrap_socket(sock, keyfile=None, certfile=None, server_side=False,
-                cert_reqs=CERT_NONE, ssl_version=PROTOCOL_SSLv23, ca_certs=None,
+                cert_reqs=None, ssl_version=None, ca_certs=None,
                 do_handshake_on_connect=True, suppress_ragged_eofs=True,
                 ciphers=None):
     # TODO the stdlib docs say the SSLContext isn't constructed until connect()
     # is called on the socket, if it's not already connected. Check if we need
     # to emulate that behavior as well, or if it's just an optimization.
-    ctx = SSLContext(ssl_version)
-    ctx.verify_mode = cert_reqs
+    ctx = SSLContext(ssl_version if ssl_version is not None else PROTOCOL_SSLv23)
+    ctx.verify_mode = cert_reqs if cert_reqs is not None else CERT_NONE
     if certfile is not None:
         ctx.load_cert_chain(certfile, keyfile)
     if ca_certs is not None:
@@ -678,3 +662,8 @@ def wrap_socket(sock, keyfile=None, certfile=None, server_side=False,
     return ctx.wrap_socket(sock, server_side=server_side,
                            do_handshake_on_connect=do_handshake_on_connect,
                            suppress_ragged_eofs=suppress_ragged_eofs)
+
+
+if ossl is None:
+    for impl in ['SSLSocket', 'SSLContext', 'wrap_socket', '_fileobject']:
+        del locals()[impl]
