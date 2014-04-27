@@ -46,5 +46,5 @@ setup(
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Software Development :: Libraries',
     ],
-    extras_requires={'full': ['pyOpenSSL>=0.14']},
+    extras_requires={'full': ['pyOpenSSL>=0.14', 'pyasn1>=0.1.7']},
 )

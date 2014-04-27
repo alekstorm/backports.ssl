@@ -20,7 +20,10 @@ import time
 import six
 from six import b
 
-from .subject_alt_name import get_subject_alt_name
+try:
+    from .subject_alt_name import get_subject_alt_name
+except ImportError:
+    get_subject_alt_name = None
 
 try:
     from OpenSSL import crypto
@@ -292,15 +295,19 @@ class SSLSocket(object):
         # The standard getpeercert() takes the nice X509 object tree returned
         # by OpenSSL and turns it into a dict according to some format it seems
         # to have made up on the spot. Here, we do our best to emulate that.
-        return dict(
+        result = dict(
             issuer=to_components(cert.get_issuer()),
             subject=to_components(cert.get_subject()),
             version=cert.get_subject(),
             serialNumber=cert.get_serial_number(),
             notBefore=cert.get_notBefore(),
             notAfter=cert.get_notAfter(),
-            subjectAltName=[('DNS', value) for value in get_subject_alt_name(cert)],
         )
+        if get_subject_alt_name is not None:
+            result.update(
+                subjectAltName=[('DNS', value) for value in get_subject_alt_name(cert)],
+            )
+        return result
 
     # FIXME support other arguments - not included in the signature to make
     # calls that expect them fail fast - use codecs.open()?
