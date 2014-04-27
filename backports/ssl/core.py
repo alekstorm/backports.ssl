@@ -231,7 +231,7 @@ class SSLSocket(object):
             self._conn.set_connect_state() # FIXME does this override do_handshake_on_connect=False?
 
         if self.connected and self._do_handshake_on_connect:
-            _safe_ssl_call(False, self._conn, 'do_handshake')
+            self.do_handshake()
 
     @property
     def connected(self):
@@ -594,6 +594,7 @@ class SSLContext(object):
         self._ctx = ossl.Context(protocol)
         self.options = OP_ALL
         self.check_hostname = False
+        self.set_default_verify_paths()
 
     @property
     def options(self):
@@ -610,7 +611,6 @@ class SSLContext(object):
 
     @verify_mode.setter
     def verify_mode(self, value):
-        # TODO verify exception is raised on failure
         self._ctx.set_verify(value, lambda conn, cert, errnum, errdepth, ok: ok)
 
     def set_default_verify_paths(self):
