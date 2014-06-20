@@ -262,6 +262,17 @@ class SSLSocket(object):
         return _safe_ssl_call(self._suppress_ragged_eofs, self._conn, 'recv',
                                bufsize, flags)
 
+    def recv_into(self, buffer, bufsize=None, flags=None):
+        # A temporary recv_into implementation. Should be replaced when
+        # PyOpenSSL has merged pyca/pyopenssl#121.
+        if bufsize is None:
+            bufsize = len(buffer)
+
+        data = self.recv(bufsize, flags)
+        data_len = len(data)
+        buffer[0:data_len] = data
+        return data_len
+
     def send(self, data, flags=None):
         return _safe_ssl_call(False, self._conn, 'send', data, flags)
 
