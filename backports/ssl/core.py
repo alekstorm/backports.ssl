@@ -67,6 +67,9 @@ HAS_NPN = False # TODO
 class SSLError(OSError):
     pass
 
+class SSLSysCallError(SSLError):
+    pass
+
 class SSLZeroReturnError(SSLError):
     pass
 
