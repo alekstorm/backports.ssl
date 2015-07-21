@@ -14,6 +14,7 @@ try:
     import select
 except ImportError:
     select = None
+import re
 import socket
 import time
 
