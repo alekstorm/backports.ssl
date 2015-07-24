@@ -14,6 +14,7 @@ try:
     import select
 except ImportError:
     select = None
+import re
 import socket
 import time
 
@@ -65,6 +66,9 @@ HAS_NPN = False # TODO
 
 # TODO missing some attributes
 class SSLError(OSError):
+    pass
+
+class SSLSysCallError(SSLError):
     pass
 
 class SSLZeroReturnError(SSLError):
