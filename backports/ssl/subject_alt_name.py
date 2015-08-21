@@ -148,6 +148,6 @@ def get_subject_alt_name(peer_cert):
                 component = name.getComponentByPosition(entry)
                 if component.getName() != 'dNSName':
                     continue
-                dns_name.append(six.binary_type(component.getComponent()))
+                dns_name.append(str(component.getComponent()))
 
     return dns_name
