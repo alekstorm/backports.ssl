@@ -133,7 +133,7 @@ def get_subject_alt_name(peer_cert):
     for i in range(peer_cert.get_extension_count()):
         ext = peer_cert.get_extension(i)
         ext_name = ext.get_short_name()
-        if ext_name != 'subjectAltName':
+        if ext_name != six.b('subjectAltName'):
             continue
 
         # PyOpenSSL returns extension data in ASN.1 encoded form
@@ -148,6 +148,6 @@ def get_subject_alt_name(peer_cert):
                 component = name.getComponentByPosition(entry)
                 if component.getName() != 'dNSName':
                     continue
-                dns_name.append(six.binary_type(component.getComponent()))
+                dns_name.append(str(component.getComponent()))
 
     return dns_name
