@@ -337,7 +337,7 @@ class SSLSocket(object):
 
     # a dash of magic to reduce boilerplate
     for method in ['accept', 'bind', 'close', 'fileno', 'getsockname', 'listen',
-                   'setblocking', 'settimeout']:
+                   'setblocking', 'settimeout', 'gettimeout', 'read']:
         locals()[method] = _proxy(method)
 
 
