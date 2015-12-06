@@ -478,7 +478,13 @@ class _fileobject(object):
                 # than that.  The returned data string is short lived
                 # as we copy it into a BytesIO and free it.  This avoids
                 # fragmentation issues on many platforms.
-                data = _safe_ssl_call(False, self._sock, 'recv', left)
+
+                # Note: never pass a large value as the maximum size
+                # to pyOpenSSL's recv because it will always allocate
+                # a buffer that size but then return a much smaller
+                # number buffer (typically 1024 bytes). This causes
+                # severe performance problems when `size` is large.
+                data = _safe_ssl_call(False, self._sock, 'recv', rbufsize)
                 if not data:
                     break
                 n = len(data)
